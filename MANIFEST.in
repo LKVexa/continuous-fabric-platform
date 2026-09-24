@@ -1,0 +1,6 @@
+include README.md LICENSE NOTICE VERSION CHANGELOG.md SECURITY.md
+include *.cmd
+recursive-include cfp/web *.html
+recursive-include tests *.py
+recursive-include tools *.py
+recursive-include reports *.md

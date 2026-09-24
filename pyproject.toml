@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cfp"
+version = "1.0.1"
+description = "Continuous Fabric Platform: one virtual platform over mobile, cloud and local compute"
+requires-python = ">=3.10"
+dependencies = []
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "RUSSELL PHILIP SMITHSON"}]
+[project.scripts]
+cfp = "cfp.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["cfp*"]
+
+[tool.setuptools.package-data]
+cfp = ["web/*.html"]
