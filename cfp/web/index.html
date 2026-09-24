@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CFP Fabric Terminal</title>
+<style>
+:root{--bg:#0b0f14;--panel:#111822;--ink:#d7e2ee;--dim:#7d8ea3;--acc:#39d0b0;--warn:#f0a44b;--bad:#ef5b6b;--line:#1f2a38}
+@media (prefers-color-scheme:light){:root{--bg:#f4f6f9;--panel:#fff;--ink:#16202c;--dim:#5a6878;--acc:#0b8f78;--line:#dde3ea}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 ui-monospace,Menlo,Consolas,monospace;height:100vh;display:flex;flex-direction:column}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header b{color:var(--acc)}#st{margin-left:auto;color:var(--dim)}
+main{flex:1;display:grid;grid-template-columns:1fr 300px;min-height:0}
+@media (max-width:760px){main{grid-template-columns:1fr}aside{display:none}}
+#out{overflow:auto;padding:12px 16px;white-space:pre-wrap;word-break:break-word}
+.me{color:var(--acc)}.err{color:var(--bad)}.sys{color:var(--dim)}
+aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:12px}
+aside h3{margin:4px 0 8px;font-size:14px;color:var(--dim);font-weight:600}
+.n{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px}.n .c{float:right;color:var(--dim)}
+.off{opacity:.45}.bar{height:4px;background:var(--line);border-radius:2px;margin-top:4px}.bar i{display:block;height:100%;background:var(--acc);border-radius:2px}
+form{display:flex;border-top:1px solid var(--line)}input{flex:1;background:var(--panel);color:var(--ink);border:0;padding:14px 16px;font:inherit;outline:none}
+button{background:var(--acc);color:#000;border:0;padding:0 18px;font:inherit;font-weight:700}
+#join{padding:24px 16px;max-width:640px}#join textarea{width:100%;height:90px;background:var(--panel);color:var(--ink);border:1px solid var(--line);font:inherit;padding:8px}
+</style></head><body>
+<header><b>CFP</b><span>Continuous Fabric Platform · virtual terminal</span><span id="st">disconnected</span></header>
+<div id="join" hidden><p>Paste a join ticket (from <code>ticket &lt;id&gt; &lt;class&gt;</code> on a local console):</p>
+<textarea id="tk"></textarea><p><input id="nid" placeholder="node id, e.g. phone-1" style="border:1px solid var(--line)"> <button id="go">Join</button></p></div>
+<main id="app" hidden><div id="out"></div><aside><h3>Fabric nodes</h3><div id="nodes"></div></aside></main>
+<form id="f" hidden><input id="in" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="help"><button>⏎</button></form>
+<script>
+const $=id=>document.getElementById(id),out=$('out');let ws,hist=[],hi=0,me=null;
+function print(t,c){const d=document.createElement('div');if(c)d.className=c;d.textContent=t;out.appendChild(d);out.scrollTop=out.scrollHeight}
+function params(){const h=new URLSearchParams(location.hash.slice(1));return{t:h.get('t'),id:h.get('id')}}
+async function sha(s){if(!crypto.subtle)return{error:'sha256 needs a secure context on this device'};const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+async function exec(t){const a=(t.args||[]).map(String);switch(t.task){case'echo':return a.join(' ');case'sha256':return sha(a.join(' '));
+case'sum':return a.reduce((s,x)=>s+Number(x),0);case'sleep':await new Promise(r=>setTimeout(r,Math.min(5000,1000*(+a[0]||.1))));return'slept';
+default:return{error:'task '+t.task+' not available on a browser node'}}}
+async function profile(){const p={zone:/Mobi|Android|iPhone/.test(navigator.userAgent)?'mobile':'browser',thermal:0.3};
+try{const b=await navigator.getBattery();p.battery=b.level}catch(e){}return p}
+function renderNodes(s){$('nodes').innerHTML='';for(const n of s.nodes){const d=document.createElement('div');d.className='n'+(n.online?'':' off');
+d.innerHTML=`<span class="c">${n.cls}</span><b></b><div class="sys"></div><div class="bar"><i style="width:${Math.round((n.battery||0)*100)}%"></i></div>`;
+d.querySelector('b').textContent=n.id;d.querySelector('.sys').textContent=`${n.tier} · ${n.zone} · load ${n.load}${n.online?'':' · OFFLINE'}`;$('nodes').appendChild(d)}}
+async function join(ticket,id){const proto=location.protocol==='https:'?'wss':'ws';ws=new WebSocket(`${proto}://${location.host}/vws`);
+$('st').textContent='joining…';ws.onopen=async()=>ws.send(JSON.stringify({op:'join',ticket,profile:await profile()}));
+ws.onmessage=async e=>{const m=JSON.parse(e.data);
+ if(m.op==='welcome'){me=m.node;$('join').hidden=true;$('app').hidden=false;$('f').hidden=false;$('st').textContent=`${me.id} · ${me.cls} · session ${m.session.slice(0,8)}`;history.replaceState(null,'',location.pathname);print('joined the fabric. type help.','sys');$('in').focus()}
+ else if(m.op==='out')print(m.text);else if(m.op==='error')print(`error ${m.code}: ${m.msg}`,'err');
+ else if(m.op==='fabric')renderNodes(m.snapshot);
+ else if(m.op==='exec'){let r;try{r=await exec(m.task)}catch(x){r={error:String(x)}}ws.send(JSON.stringify({op:'result',job:m.job,result:r}))}};
+ws.onclose=()=>{$('st').textContent='disconnected (RAM session reset; re-join with a new ticket)'}}
+$('f').onsubmit=e=>{e.preventDefault();const v=$('in').value;if(!v||!ws)return;hist.push(v);hi=hist.length;print('$ '+v,'me');ws.send(JSON.stringify({op:'term',line:v}));$('in').value=''};
+$('in').onkeydown=e=>{if(e.key==='ArrowUp'&&hi>0){$('in').value=hist[--hi]}else if(e.key==='ArrowDown'&&hi<hist.length){$('in').value=hist[++hi]||''}};
+setInterval(async()=>{if(ws&&ws.readyState===1&&me)ws.send(JSON.stringify({op:'hb',telemetry:await profile()}))},10000);
+$('go').onclick=()=>join($('tk').value.trim(),$('nid').value);
+const p=params();if(p.t)join(p.t,p.id);else $('join').hidden=false;
+</script></body></html>
